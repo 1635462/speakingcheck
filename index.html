@@ -55,7 +55,7 @@
     <!-- メインコンテナ -->
     <div class="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 md:p-10 border-4 border-primary-blue">
         
-        <!-- タイトルをSpeaking Checkに変更 -->
+        <!-- タイトル -->
         <h1 class="text-3xl md:text-4xl font-bold text-center text-primary-blue mb-6">
             <span role="img" aria-label="speech icon">🗣️</span>
             Speaking Check
@@ -69,14 +69,11 @@
         </div>
 
         <!-- 認識されたテキスト表示エリア -->
-        <!-- 境界線をシンプルに -->
         <div class="bg-white border-2 border-gray-300 p-4 rounded-xl shadow-inner min-h-[100px] mb-8">
             <h2 class="text-xl font-bold text-gray-700 mb-2">What You Said（あなたが言ったこと）：</h2>
             <p id="result-text" class="text-2xl text-gray-800 font-extrabold break-words">---</p>
         </div>
         
-        <!-- 採点結果表示エリア (#score-area) は削除 -->
-
         <!-- マイクボタンコンテナ -->
         <div class="flex flex-col items-center justify-center">
             <button id="microphone-button" class="microphone-btn 
@@ -98,12 +95,8 @@
             <p id="mic-instruction" class="mt-4 text-gray-600 font-medium">Tap and speak!</p>
         </div>
         
-        <!-- 以前の警告ボックスは削除されました -->
-
     </div>
     
-    <!-- 開発者ロゴは削除されました -->
-
     <script>
         // DOM要素の取得
         const statusText = document.getElementById('status-text');
@@ -111,17 +104,12 @@
         const micButton = document.getElementById('microphone-button');
         const micIcon = document.getElementById('mic-icon');
         const micInstruction = document.getElementById('mic-instruction');
-        const warningText = document.getElementById('warning-text'); // warningText変数はDOMから削除されたが、ここでは残しておく
         
-        // 採点機能用のDOM要素はすべて削除
-
         // Web Speech APIの互換性を確認
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
         let recognition = null;
         let isRecording = false;
-
-        // AI採点ロジックとJSONスキーマはすべて削除
 
         /**
          * 音声認識機能の初期化とイベント設定
@@ -133,7 +121,6 @@
             
             if (!SpeechRecognition) {
                 // Speech Recognitionが利用不可の場合の処理
-                // 警告ボックスは削除したが、エラーメッセージはstatusTextに出す
                 statusText.textContent = '❌ 音声認識は利用できません。ChromeまたはEdgeをご利用ください。';
                 micButton.disabled = true;
                 micButton.classList.add('opacity-50', 'cursor-not-allowed');
@@ -205,7 +192,6 @@
 
                 resultText.textContent = transcript;
                 statusText.textContent = '✅ 認識しました！';
-                // AI採点ロジックはここから完全に削除
             };
 
             // 録音終了時のイベント 
