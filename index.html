@@ -126,7 +126,6 @@
 
     <script>
         // 環境がAPIキーを自動挿入するためのフックとして、空のキーを定義します。
-        // ただし、このキーはURLに含めず、環境が自動で認証トークンを付与するのに任せます。
         const apiKey = ""; 
         const modelName = "gemini-2.5-flash-preview-09-2025";
         
@@ -192,9 +191,8 @@
             const systemPrompt = "You are a friendly and encouraging English teacher for elementary school students. Your task is to evaluate a single English sentence provided by the student. Provide a score from 1 to 100 based on correctness, clarity, and fluency. The scoring should be generous and focused on positive reinforcement. You must also provide the best Japanese translation of the spoken sentence, suitable for a child. Always return the response in the specified JSON format.";
             const userQuery = `Please score, give feedback, and provide a Japanese translation for the following English sentence spoken by a child: "${userTranscript}"`;
             
-            // 修正: APIキーをURLに含めるのをやめ、環境の自動認証機能に依存する
-            // 403エラーを解決するため、?key=${apiKey} を削除
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+            // 修正済み: APIキーの自動挿入を有効にするため、?key=${apiKey} を含める
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
