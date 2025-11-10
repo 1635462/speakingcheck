@@ -13,8 +13,6 @@
                 extend: {
                     colors: {
                         'primary-blue': '#4F46E5', // Indigo
-                        'secondary-yellow': '#FBBF24', // Amber
-                        'success-green': '#10B981', // Emerald
                         'danger-red': '#EF4444', // Red
                     },
                     fontFamily: {
@@ -59,9 +57,9 @@
         
         <!-- タイトル -->
         <h1 class="text-3xl md:text-4xl font-bold text-center text-primary-blue mb-6">
-            <span role="img" aria-label="check mark">✅</span>
-            Speaking Check
-            <span role="img" aria-label="check mark">✅</span>
+            <span role="img" aria-label="check mark">🗣️</span>
+            Speech To Text Check
+            <span role="img" aria-label="check mark">💬</span>
         </h1>
 
         <!-- メッセージエリア -->
@@ -71,27 +69,12 @@
         </div>
 
         <!-- 認識されたテキスト表示エリア -->
-        <div class="bg-white border-2 border-secondary-yellow p-4 rounded-xl shadow-inner min-h-[100px] mb-8">
+        <div class="bg-white border-2 border-gray-300 p-4 rounded-xl shadow-inner min-h-[100px] mb-8">
             <h2 class="text-xl font-bold text-gray-700 mb-2">What You Said（あなたが言ったこと）：</h2>
             <p id="result-text" class="text-2xl text-gray-800 font-extrabold break-words">---</p>
         </div>
         
-        <!-- 採点結果表示エリア -->
-        <div id="score-area" class="bg-gray-100 p-4 rounded-xl border border-gray-300 mb-8 hidden">
-            <h2 class="text-xl font-bold text-primary-blue mb-3">Your Score</h2>
-            
-            <div class="flex items-center space-x-4 mb-3">
-                <span id="score-text" class="text-5xl font-extrabold text-gray-500">--</span>
-                <span class="text-3xl font-bold text-gray-500">/ 100</span>
-            </div>
-
-            <!-- 日本語訳 -->
-            <h3 class="text-lg font-bold text-gray-700 mb-1 mt-4">日本語訳:</h3>
-            <p id="retranslation-text" class="text-gray-800 font-semibold mb-3">...</p> 
-
-            <h3 class="text-lg font-bold text-gray-700 mb-1">Feedback:</h3>
-            <p id="feedback-text" class="text-gray-600 italic">... waiting for check ...</p>
-        </div>
+        <!-- 採点結果表示エリアは完全に削除 -->
 
         <!-- マイクボタンコンテナ -->
         <div class="flex flex-col items-center justify-center">
@@ -114,162 +97,30 @@
             <p id="mic-instruction" class="mt-4 text-gray-600 font-medium">Tap and speak!</p>
         </div>
         
-        <!-- 注意書き (iframeの制約に関する具体的な指示を修正) -->
+        <!-- 注意書き (API利用不可に関する具体的な指示) -->
         <div id="warning-box" class="mt-8 p-3 text-sm rounded-lg bg-danger-red/10 border border-danger-red text-danger-red">
-            <p class="font-bold mb-1">⚠️ 動作しない場合のご注意</p>
+            <p class="font-bold mb-1">⚠️ 機能制限のお知らせ</p>
             <p id="warning-text">
-                マイクが使用できない場合は<strong class="font-extrabold">利用許可設定</strong>を確認してください。
+                **AIによる採点・フィードバック機能** は、認証エラーにより現在利用できません。代わりに、**あなたが話した英語をテキストに変換する機能** のみを提供します。
             </p>
         </div>
 
     </div>
 
     <script>
-        // 環境がAPIキーを自動挿入するためのフックとして、空のキーを定義します。
-        const apiKey = ""; 
-        const modelName = "gemini-2.5-flash-preview-09-2025";
-        
         // DOM要素の取得
         const statusText = document.getElementById('status-text');
         const resultText = document.getElementById('result-text');
         const micButton = document.getElementById('microphone-button');
         const micIcon = document.getElementById('mic-icon');
         const micInstruction = document.getElementById('mic-instruction');
-        const warningBox = document.getElementById('warning-box');
         const warningText = document.getElementById('warning-text');
-        
-        // 採点機能用のDOM要素
-        const scoreArea = document.getElementById('score-area');
-        const scoreText = document.getElementById('score-text');
-        const feedbackText = document.getElementById('feedback-text');
-        const retranslationText = document.getElementById('retranslation-text'); 
 
         // Web Speech APIの互換性を確認
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
         let recognition = null;
         let isRecording = false;
-
-        // JSONスキーマ定義 (LLM用)
-        const responseSchema = {
-            type: "OBJECT",
-            properties: {
-                "score": { 
-                    "type": "NUMBER",
-                    "description": "A score from 1 to 100 based on grammatical correctness, fluency, and appropriateness for elementary school level. Prioritize encouragement." 
-                },
-                "feedback_en": { 
-                    "type": "STRING",
-                    "description": "A very simple, encouraging, and actionable feedback message in English for an elementary student (e.g., 'Great job! Try to say 'hello' next time.'). Max 15 words." 
-                },
-                "feedback_jp": { 
-                    "type": "STRING",
-                    "description": "小学生向けの簡単な日本語フィードバック（例：すごく上手！次は「こんにちは」と言ってみてね。）。" 
-                },
-                "retranslation_jp": { 
-                    "type": "STRING",
-                    "description": "The best Japanese translation of the spoken English transcript, suitable for an elementary student."
-                }
-            },
-            "required": ["score", "feedback_en", "feedback_jp", "retranslation_jp"],
-            "propertyOrdering": ["score", "feedback_en", "feedback_jp", "retranslation_jp"]
-        };
-
-        /**
-         * LLMを使用して英語を採点し、フィードバックを取得する関数
-         * @param {string} userTranscript - ユーザーが話した英語のテキスト
-         * @returns {Promise<object>} スコア、フィードバック、日本語訳を含むオブジェクト
-         */
-        async function checkEnglishAndScore(userTranscript) {
-            scoreArea.classList.remove('hidden');
-            scoreText.textContent = '...';
-            scoreText.classList.remove('text-success-green', 'text-secondary-yellow', 'text-danger-red');
-            scoreText.classList.add('text-gray-500');
-            retranslationText.textContent = '...';
-            feedbackText.textContent = 'Checking your English... (AI is thinking)';
-
-            const systemPrompt = "You are a friendly and encouraging English teacher for elementary school students. Your task is to evaluate a single English sentence provided by the student. Provide a score from 1 to 100 based on correctness, clarity, and fluency. The scoring should be generous and focused on positive reinforcement. You must also provide the best Japanese translation of the spoken sentence, suitable for a child. Always return the response in the specified JSON format.";
-            const userQuery = `Please score, give feedback, and provide a Japanese translation for the following English sentence spoken by a child: "${userTranscript}"`;
-            
-            // APIキーをクエリパラメータとして使用する形式に戻す
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: responseSchema
-                }
-            };
-
-            const maxRetries = 3;
-            let lastError = null;
-
-            for (let attempt = 0; attempt < maxRetries; attempt++) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        // ヘッダーは'Content-Type'のみに限定し、環境による認証情報の自動付与に期待する
-                        headers: { 
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        const errorBody = await response.text();
-                        console.error(`Attempt ${attempt + 1} received a bad response status: ${response.status}. Full error body:`, errorBody.substring(0, 500) + '...');
-                        throw new Error(`HTTP error! status: ${response.status} (${response.statusText}). Response body: ${errorBody.substring(0, 80)}...`);
-                    }
-
-                    const result = await response.json();
-                    const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-                    
-                    if (!jsonText) {
-                        console.error("Received unexpected or empty API response structure. Full result:", result);
-                        throw new Error("API response was missing expected JSON content.");
-                    }
-
-                    const parsedJson = JSON.parse(jsonText);
-                    return parsedJson;
-
-                } catch (error) {
-                    lastError = error;
-                    // Exponential backoff
-                    if (attempt < maxRetries - 1) {
-                        console.log(`Attempt ${attempt + 1} failed. Error: ${error.message} (${error.responseBody ? error.responseBody.substring(0, 50) + '...' : ''}). Retrying in ${Math.pow(2, attempt) * 1000}ms...`);
-                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-                    }
-                }
-            }
-            // 全てのリトライが失敗した場合
-            throw new Error(`Failed to get score after ${maxRetries} attempts. Last error: ${lastError.message}`);
-        }
-
-        /**
-         * 採点結果をUIに表示する関数
-         * @param {object} scoreData - スコアデータオブジェクト
-         */
-        function displayScore(scoreData) {
-            const score = scoreData.score;
-            const feedback = `${scoreData.feedback_en} (${scoreData.feedback_jp})`;
-            const retranslation = scoreData.retranslation_jp; 
-
-            scoreText.textContent = score;
-            feedbackText.textContent = feedback;
-            retranslationText.textContent = retranslation; 
-
-            // スコアに応じて色を変更
-            scoreText.classList.remove('text-gray-500', 'text-success-green', 'text-secondary-yellow', 'text-danger-red');
-            if (score >= 90) {
-                scoreText.classList.add('text-success-green');
-            } else if (score >= 70) {
-                scoreText.classList.add('text-secondary-yellow');
-            } else {
-                scoreText.classList.add('text-danger-red');
-            }
-        }
 
         /**
          * 音声認識機能の初期化とイベント設定
@@ -315,7 +166,6 @@
                     statusText.textContent = '👂 聞いています... 今話してください！';
                     micInstruction.textContent = 'タップして終了';
                     resultText.textContent = ''; 
-                    scoreArea.classList.add('hidden');
                     
                     recognition.start();
 
@@ -339,7 +189,7 @@
             recognition.onresult = async (event) => {
                 let transcript = event.results[0][0].transcript;
                 
-                // 認識結果の整形 (句読点がない場合、ピリオドを追加)
+                // 認識結果の整形
                 if (!/[.!?]$/.test(transcript.trim())) {
                     transcript = transcript.trim() + '.';
                 } else {
@@ -347,24 +197,8 @@
                 }
 
                 resultText.textContent = transcript;
-                statusText.textContent = '✅ 認識しました！採点中です...';
-
-                try {
-                    const scoreData = await checkEnglishAndScore(transcript);
-                    displayScore(scoreData);
-                    statusText.textContent = '🎉 採点完了！結果を確認してください。';
-                } catch (e) {
-                    // AI採点に失敗した場合のより具体的なエラー処理
-                    console.error("Scoring failed (API/JSON Error):", e);
-                    scoreText.textContent = 'N/A';
-                    scoreText.classList.remove('text-success-green', 'text-secondary-yellow', 'text-gray-500');
-                    scoreText.classList.add('text-danger-red');
-                    
-                    // エラーメッセージにAPI関連のヒントを追加
-                    retranslationText.textContent = 'AIによる採点処理中にエラーが発生しました。'; 
-                    feedbackText.textContent = `サーバー応答またはJSON解析エラーです。コンソールを確認してください。 (Error: ${e.message.split('\n')[0]})`;
-                    statusText.textContent = '❌ 採点中に重大なエラーが発生しました。'; 
-                }
+                statusText.textContent = '✅ 認識しました！';
+                // ここでAPIコールは行いません
             };
 
             // 録音終了時のイベント 
@@ -378,7 +212,6 @@
                 
                 if (resultText.textContent === "" || resultText.textContent === "---") {
                     statusText.textContent = '聞こえませんでした。もう一度話してみよう！'; 
-                    scoreArea.classList.add('hidden');
                     resultText.textContent = '---';
                 }
             };
