@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speaking Check App</title>
+    <!-- Tailwind CSSの読み込み -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Tailwindの設定： Interフォントとカスタムカラーを使用
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#4F46E5', // Indigo
+                        'secondary-yellow': '#FBBF24', // Amber
+                        'success-green': '#10B981', // Emerald
+                        'danger-red': '#EF4444', // Red
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <style>
+        /* Interフォントの読み込み */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        /* マイクボタンのアニメーション */
+        .microphone-btn {
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .microphone-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* 録音中のパルスアニメーション */
+        .recording-pulse {
+            animation: pulse-red 1.5s infinite;
+        }
+        
+        @keyframes pulse-red {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 30px rgba(239, 68, 68, 0);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4 font-sans">
+
+    <!-- メインコンテナ -->
+    <div class="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 md:p-10 border-4 border-primary-blue">
+        
+        <!-- タイトル -->
+        <h1 class="text-3xl md:text-4xl font-bold text-center text-primary-blue mb-6">
+            <span role="img" aria-label="check mark">✅</span>
+            Speaking Check
+            <span role="img" aria-label="check mark">✅</span>
+        </h1>
+
+        <!-- メッセージエリア -->
+        <div id="status-display" class="bg-primary-blue/10 p-4 rounded-xl mb-8 text-center text-lg font-semibold text-primary-blue h-20 flex items-center justify-center">
+            <!-- ユーザーアクションを促すメッセージを表示する -->
+            <p id="status-text">マイクボタンをタップして英語を話してください。</p>
+        </div>
+
+        <!-- 認識されたテキスト表示エリア -->
+        <div class="bg-white border-2 border-secondary-yellow p-4 rounded-xl shadow-inner min-h-[100px] mb-8">
+            <h2 class="text-xl font-bold text-gray-700 mb-2">What You Said（あなたが言ったこと）：</h2>
+            <p id="result-text" class="text-2xl text-gray-800 font-extrabold break-words">---</p>
+        </div>
+        
+        <!-- 採点結果表示エリア -->
+        <div id="score-area" class="bg-gray-100 p-4 rounded-xl border border-gray-300 mb-8 hidden">
+            <h2 class="text-xl font-bold text-primary-blue mb-3">Your Score</h2>
+            
+            <div class="flex items-center space-x-4 mb-3">
+                <span id="score-text" class="text-5xl font-extrabold text-gray-500">--</span>
+                <span class="text-3xl font-bold text-gray-500">/ 100</span>
+            </div>
+
+            <!-- 日本語訳 -->
+            <h3 class="text-lg font-bold text-gray-700 mb-1 mt-4">日本語訳:</h3>
+            <p id="retranslation-text" class="text-gray-800 font-semibold mb-3">...</p> 
+
+            <h3 class="text-lg font-bold text-gray-700 mb-1">Feedback:</h3>
+            <p id="feedback-text" class="text-gray-600 italic">... waiting for check ...</p>
+        </div>
+
+        <!-- マイクボタンコンテナ -->
+        <div class="flex flex-col items-center justify-center">
+            <button id="microphone-button" class="microphone-btn 
+                w-32 h-32 rounded-full 
+                bg-primary-blue text-white 
+                shadow-xl hover:shadow-2xl 
+                flex items-center justify-center 
+                focus:outline-none" 
+                aria-label="Start/Stop Recording">
+                
+                <!-- マイクアイコン (Lucide icon風のSVG) -->
+                <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-12 h-12">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                </svg>
+            </button>
+            <!-- 録音指示メッセージ -->
+            <p id="mic-instruction" class="mt-4 text-gray-600 font-medium">Tap and speak!</p>
+        </div>
+        
+        <!-- 注意書き (iframeの制約に関する具体的な指示を修正) -->
+        <div id="warning-box" class="mt-8 p-3 text-sm rounded-lg bg-danger-red/10 border border-danger-red text-danger-red">
+            <p class="font-bold mb-1">⚠️ 動作しない場合のご注意</p>
+            <p id="warning-text">
+                マイクが使用できない場合は<strong class="font-extrabold">利用許可設定</strong>を確認してください。
+            </p>
+        </div>
+
+    </div>
+
+    <script>
+        // 環境がAPIキーを自動挿入するためのフックとして、空のキーを定義します。
+        // !!! 環境のプロトコルにより、この変数が実行時に認証トークンに置き換えられます !!!
+        const apiKey = "";
+        const modelName = "gemini-2.5-flash-preview-09-2025";
+        
+        // DOM要素の取得
+        const statusText = document.getElementById('status-text');
+        const resultText = document.getElementById('result-text');
+        const micButton = document.getElementById('microphone-button');
+        const micIcon = document.getElementById('mic-icon');
+        const micInstruction = document.getElementById('mic-instruction');
+        const warningBox = document.getElementById('warning-box');
+        const warningText = document.getElementById('warning-text');
+        
+        // 採点機能用のDOM要素
+        const scoreArea = document.getElementById('score-area');
+        const scoreText = document.getElementById('score-text');
+        const feedbackText = document.getElementById('feedback-text');
+        const retranslationText = document.getElementById('retranslation-text'); 
+
+        // Web Speech APIの互換性を確認
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        let recognition = null;
+        let isRecording = false;
+
+        // JSONスキーマ定義 (LLM用)
+        const responseSchema = {
+            type: "OBJECT",
+            properties: {
+                "score": { 
+                    "type": "NUMBER",
+                    "description": "A score from 1 to 100 based on grammatical correctness, fluency, and appropriateness for elementary school level. Prioritize encouragement." 
+                },
+                "feedback_en": { 
+                    "type": "STRING",
+                    "description": "A very simple, encouraging, and actionable feedback message in English for an elementary student (e.g., 'Great job! Try to say 'hello' next time.'). Max 15 words." 
+                },
+                "feedback_jp": { 
+                    "type": "STRING",
+                    "description": "小学生向けの簡単な日本語フィードバック（例：すごく上手！次は「こんにちは」と言ってみてね。）。" 
+                },
+                "retranslation_jp": { 
+                    "type": "STRING",
+                    "description": "The best Japanese translation of the spoken English transcript, suitable for an elementary student."
+                }
+            },
+            "required": ["score", "feedback_en", "feedback_jp", "retranslation_jp"],
+            "propertyOrdering": ["score", "feedback_en", "feedback_jp", "retranslation_jp"]
+        };
+
+        /**
+         * LLMを使用して英語を採点し、フィードバックを取得する関数
+         * @param {string} userTranscript - ユーザーが話した英語のテキスト
+         * @returns {Promise<object>} スコア、フィードバック、日本語訳を含むオブジェクト
+         */
+        async function checkEnglishAndScore(userTranscript) {
+            scoreArea.classList.remove('hidden');
+            scoreText.textContent = '...';
+            scoreText.classList.remove('text-success-green', 'text-secondary-yellow', 'text-danger-red');
+            scoreText.classList.add('text-gray-500');
+            retranslationText.textContent = '...';
+            feedbackText.textContent = 'Checking your English... (AI is thinking)';
+
+            const systemPrompt = "You are a friendly and encouraging English teacher for elementary school students. Your task is to evaluate a single English sentence provided by the student. Provide a score from 1 to 100 based on correctness, clarity, and fluency. The scoring should be generous and focused on positive reinforcement. You must also provide the best Japanese translation of the spoken sentence, suitable for a child. Always return the response in the specified JSON format.";
+            const userQuery = `Please score, give feedback, and provide a Japanese translation for the following English sentence spoken by a child: "${userTranscript}"`;
+            
+            // 修正: APIキーをクエリパラメータとして確実に含めます
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema
+                }
+            };
+
+            const maxRetries = 3;
+            let lastError = null;
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        // HTTPエラーの場合、ステータスコードを含めてエラーを投げる
+                        const errorBody = await response.text();
+                        // 403エラーが続く場合、認証の問題（キーがない）ことを示唆します。
+                        throw new Error(`HTTP error! status: ${response.status} (${response.statusText}). Response body: ${errorBody.substring(0, 100)}...`);
+                    }
+
+                    const result = await response.json();
+                    const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (!jsonText) {
+                        // JSONテキストが空の場合、完全な結果をログに含める
+                        throw new Error("Received empty JSON response from API. Full result logged in console.");
+                    }
+
+                    const parsedJson = JSON.parse(jsonText);
+                    return parsedJson;
+
+                } catch (error) {
+                    lastError = error;
+                    console.error(`Attempt ${attempt + 1} failed. Error: ${error.message}`);
+                    // Exponential backoff
+                    if (attempt < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                    }
+                }
+            }
+            // 全てのリトライが失敗した場合
+            throw new Error(`Failed to get score after ${maxRetries} attempts. Last error: ${lastError.message}`);
+        }
+
+        /**
+         * 採点結果をUIに表示する関数
+         * @param {object} scoreData - スコアデータオブジェクト
+         */
+        function displayScore(scoreData) {
+            const score = scoreData.score;
+            const feedback = `${scoreData.feedback_en} (${scoreData.feedback_jp})`;
+            const retranslation = scoreData.retranslation_jp; 
+
+            scoreText.textContent = score;
+            feedbackText.textContent = feedback;
+            retranslationText.textContent = retranslation; 
+
+            // スコアに応じて色を変更
+            scoreText.classList.remove('text-gray-500', 'text-success-green', 'text-secondary-yellow', 'text-danger-red');
+            if (score >= 90) {
+                scoreText.classList.add('text-success-green');
+            } else if (score >= 70) {
+                scoreText.classList.add('text-secondary-yellow');
+            } else {
+                scoreText.classList.add('text-danger-red');
+            }
+        }
+
+        /**
+         * 音声認識機能の初期化とイベント設定
+         */
+        function initRecognition() {
+            // 初期メッセージを設定
+            statusText.textContent = 'マイクボタンをタップして英語を話してください。';
+            resultText.textContent = '---';
+            
+            if (!SpeechRecognition) {
+                // Speech Recognitionが利用不可の場合の処理
+                warningText.innerHTML = '❌ Speech Recognition is not available on this browser. Please use Chrome or Edge.';
+                statusText.textContent = '❌ 音声認識は利用できません。ChromeまたはEdgeをご利用ください。';
+                micButton.disabled = true;
+                micButton.classList.add('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            
+            // 英会話練習のため、言語を英語（アメリカ）に設定
+            recognition.lang = 'en-US'; 
+            recognition.interimResults = false; 
+            recognition.continuous = false; // 一回発話ごとに停止
+
+            // **マイク許可を事前に確認する関数**
+            const startRecording = async () => {
+                if (isRecording) {
+                    recognition.stop();
+                    return;
+                }
+
+                try {
+                    // 埋め込み環境での問題を回避するため、navigator.mediaDevices.getUserMedia を使って
+                    // マイクの許可を明示的に要求し、許可ダイアログを強制的に表示させる。
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop()); // ストリームはすぐに停止
+
+                    // 録音開始のUI変更とWeb Speech APIの開始
+                    isRecording = true;
+                    micButton.classList.add('bg-danger-red', 'recording-pulse');
+                    micButton.classList.remove('bg-primary-blue');
+                    micIcon.style.stroke = 'white';
+                    statusText.textContent = '👂 聞いています... 今話してください！';
+                    micInstruction.textContent = 'タップして終了';
+                    resultText.textContent = ''; 
+                    scoreArea.classList.add('hidden');
+                    
+                    recognition.start();
+
+                } catch (e) {
+                    // ユーザーがマイクアクセスを拒否した場合
+                    console.error("Microphone access failed:", e);
+                    isRecording = false; // エラーが発生した場合はisRecordingをリセット
+                    micButton.classList.remove('bg-danger-red', 'recording-pulse');
+                    micButton.classList.add('bg-primary-blue');
+                    micIcon.style.stroke = 'white';
+                    statusText.textContent = '❌ マイクの利用が拒否されました。ブラウザの設定を確認してください。'; 
+                    // warningTextはHTMLで静的に設定されているので変更しない
+                }
+            };
+            
+            // 録音開始時のイベント 
+            recognition.onstart = () => {
+                // UIはstartRecordingで更新済みだが、念のため状態を保証
+                isRecording = true;
+            };
+
+            // 認識結果が出た時のイベント 
+            recognition.onresult = async (event) => {
+                let transcript = event.results[0][0].transcript;
+                
+                // 認識結果の整形 (句読点がない場合、ピリオドを追加)
+                if (!/[.!?]$/.test(transcript.trim())) {
+                    transcript = transcript.trim() + '.';
+                } else {
+                    transcript = transcript.trim();
+                }
+
+                resultText.textContent = transcript;
+                statusText.textContent = '✅ 認識しました！採点中です...';
+
+                try {
+                    const scoreData = await checkEnglishAndScore(transcript);
+                    displayScore(scoreData);
+                    statusText.textContent = '🎉 採点完了！結果を確認してください。';
+                } catch (e) {
+                    // AI採点に失敗した場合のより具体的なエラー処理
+                    console.error("Scoring failed (API/JSON Error):", e);
+                    scoreText.textContent = 'N/A';
+                    scoreText.classList.remove('text-success-green', 'text-secondary-yellow', 'text-gray-500');
+                    scoreText.classList.add('text-danger-red');
+                    
+                    // エラーメッセージにAPI関連のヒントを追加
+                    retranslationText.textContent = 'AIによる採点処理中にエラーが発生しました。'; 
+                    feedbackText.textContent = `サーバー応答またはJSON解析エラーです。コンソールを確認し、もう一度お試しください。 (Server/JSON error: ${e.message.split('\n')[0]})`;
+                    statusText.textContent = '❌ 採点中に重大なエラーが発生しました。'; 
+                }
+            };
+
+            // 録音終了時のイベント 
+            recognition.onend = () => {
+                isRecording = false;
+                // UIはonendでリセット
+                micButton.classList.remove('bg-danger-red', 'recording-pulse');
+                micButton.classList.add('bg-primary-blue');
+                micIcon.style.stroke = 'white';
+                micInstruction.textContent = 'Tap and speak!'; 
+                
+                // 認識結果が空の場合、認識失敗として扱う
+                if (resultText.textContent === "" || resultText.textContent === "---") {
+                    statusText.textContent = '聞こえませんでした。もう一度話してみよう！'; 
+                    scoreArea.classList.add('hidden');
+                    resultText.textContent = '---';
+                }
+            };
+
+            // エラー発生時のイベント 
+            recognition.onerror = (event) => {
+                console.error('Speech Recognition Error:', event.error);
+                isRecording = false;
+                micButton.classList.remove('bg-danger-red', 'recording-pulse');
+                micButton.classList.add('bg-primary-blue');
+                micIcon.style.stroke = 'white';
+                micInstruction.textContent = 'Tap and speak!'; 
+                
+                let errorMessage = '❌ エラーが発生しました。';
+                if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                    errorMessage = '❌ マイクの利用が拒否されました。ブラウザの設定を確認してください。'; 
+                } else if (event.error === 'no-speech') {
+                    errorMessage = '音声が検出されませんでした。はっきり話してください。'; 
+                }
+                statusText.textContent = errorMessage;
+            };
+
+            // マイクボタンのクリックハンドラ
+            micButton.addEventListener('click', startRecording);
+        }
+        
+        // アプリケーションの初期化
+        window.onload = initRecognition;
+    </script>
+</body>
+</html>
